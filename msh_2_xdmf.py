@@ -10,7 +10,7 @@ class Msh2Xdmf:
     """convert the msh file to xdmf and h5 files that can be read by fenicsx."""
 
 
-    def __init__(self, path: Path, to_save: Path = None):
+    def __init__(self, path: Path, save_path: Path = None):
         """Initialize the MeshConverter and load the mesh data.
 
         Parameters
@@ -33,7 +33,7 @@ class Msh2Xdmf:
             The mesh object loaded from the input file using meshio.
         """
         self.path = path
-        self.to_save = to_save if not None else path
+        self.save_path = save_path if save_path is not None else path
         self.mesh = meshio.read(path)
 
     def convert(self) -> None:
@@ -54,7 +54,7 @@ class Msh2Xdmf:
         FileNotFoundError
             If the required .geo file is missing.
         """
-        self.check_geo_duplicate_physical_groups(path.with_suffix(".geo"))
+        self.check_geo_duplicate_physical_groups(self.path.with_suffix(".geo"))
 
         vol_type, surface_type = self.determine_elements_type()
         self.save_volume_elements(vol_type)
@@ -123,7 +123,7 @@ class Msh2Xdmf:
             cells={vol_type: self.mesh.cells_dict[vol_type]},
             cell_data={"Grid": [self.mesh.cell_data_dict["gmsh:physical"][vol_type]]},
         )
-        save_path = path.with_stem(self.save_path.stem + "_volume").with_suffix(".xdmf")
+        save_path = self.save_path.with_stem(self.save_path.stem + "_volume").with_suffix(".xdmf")
         meshio.write(save_path, vol_mesh)
 
     def save_surface_elements(self, surface_type: str) -> None:
@@ -132,18 +132,14 @@ class Msh2Xdmf:
 
         Parameters
         ----------
-        mesh :  meshio.mesh.Mesh
-            the loaded mesh from the .msh file.
         surface_type : str
-        save_path: Path
-            path to desired place to save the file + the name of the file
         """
         facet_mesh = meshio.Mesh(
             points=self.mesh.points,
             cells={surface_type: self.mesh.cells_dict[surface_type]},
             cell_data={"Grid": [self.mesh.cell_data_dict["gmsh:physical"][surface_type]]},
         )
-        save_path = self.path.with_stem(save_path.stem + "_surface").with_suffix(".xdmf")
+        save_path = self.save_path.with_stem(save_path.stem + "_surface").with_suffix(".xdmf")
         meshio.write(save_path, facet_mesh)
         
     @staticmethod
