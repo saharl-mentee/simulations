@@ -139,7 +139,7 @@ class Msh2Xdmf:
             cells={surface_type: self.mesh.cells_dict[surface_type]},
             cell_data={"Grid": [self.mesh.cell_data_dict["gmsh:physical"][surface_type]]},
         )
-        save_path = self.save_path.with_stem(save_path.stem + "_surface").with_suffix(".xdmf")
+        save_path = self.save_path.with_stem(self.save_path.stem + "_surface").with_suffix(".xdmf")
         meshio.write(save_path, facet_mesh)
         
     @staticmethod
@@ -172,7 +172,7 @@ class Msh2Xdmf:
 
 if __name__ == "__main__":
     path = Path(
-        r"/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/fin_assembly/fin_asm2.msh"
+        r"/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/test/fin_asm2.msh"
     )
     exporter = Msh2Xdmf(path)
     exporter.convert()
