@@ -3,6 +3,7 @@ from typing import Dict
 import h5py
 from attr import dataclass
 from dolfinx.io import XDMFFile
+from matplotlib.dates import TH
 from mpi4py import MPI
 
 
@@ -49,9 +50,13 @@ class ElasticMaterialLibrary:
     
     
 class ThermalMaterialLibrary:
+    # data source: https://thermtest.com/thermal-resources/materials-database
     _registry = {
-        "steel": ThermalMaterial(name="Steel", k=210e9, cp=0.3),
-        "aluminum": ThermalMaterial(name="Aluminum", k=70e9, cp=0.33),
+        "aluminum-6061": ThermalMaterial(name="Aluminum-6061", k=167, cp=896, rho=2700),
+        "air": ThermalMaterial(name="Air", k=0.025, cp=1004, rho=1.29),
+        "copper": ThermalMaterial(name="Copper", k=397, cp=385, rho=8940),
+        "ss-304": ThermalMaterial(name="Stainless Steel 304", k=14.6, cp=502, rho=7920),
+        "ss-316": ThermalMaterial(name="Stainless Steel 316", k=13.5, cp=470, rho=8230)
     }
 
     @classmethod
@@ -59,4 +64,4 @@ class ThermalMaterialLibrary:
         return cls._registry[name.lower()]
 
 if __name__ == "__main__":
-    
+    pass
