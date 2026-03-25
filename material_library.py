@@ -40,8 +40,8 @@ class LinearElasticMaterial:
 
 class ElasticMaterialLibrary:
     _registry = {
-        "steel": LinearElasticMaterial(name="Steel", E=210e9, nu=0.3),
-        "aluminum": LinearElasticMaterial(name="Aluminum", E=70e9, nu=0.33),
+        "steel": LinearElasticMaterial(name="Steel", E=210e9, nu=0.3, rho=7800),
+        "aluminum": LinearElasticMaterial(name="Aluminum", E=70e9, nu=0.33, rho=2700),
     }
 
     @classmethod
@@ -52,7 +52,7 @@ class ElasticMaterialLibrary:
 class ThermalMaterialLibrary:
     # data source: https://thermtest.com/thermal-resources/materials-database
     _registry = {
-        "aluminum-6061": ThermalMaterial(name="Aluminum-6061", k=167, cp=896, rho=2700),
+        "aluminium-6061": ThermalMaterial(name="Aluminum-6061", k=167, cp=896, rho=2700),
         "air": ThermalMaterial(name="Air", k=0.025, cp=1004, rho=1.29),
         "copper": ThermalMaterial(name="Copper", k=397, cp=385, rho=8940),
         "ss-304": ThermalMaterial(name="Stainless Steel 304", k=14.6, cp=502, rho=7920),
