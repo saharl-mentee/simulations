@@ -1,3 +1,4 @@
+import gc
 import re
 import meshio
 import pandas as pd
@@ -125,6 +126,8 @@ class Msh2Xdmf:
         )
         save_path = self.save_path.with_stem(self.save_path.stem + "_volume").with_suffix(".xdmf")
         meshio.write(save_path, vol_mesh)
+        del vol_mesh
+        gc.collect()
 
     def save_surface_elements(self, surface_type: str) -> None:
         """Extract and save the 2D Facets (The Boundary Tags)
@@ -141,6 +144,8 @@ class Msh2Xdmf:
         )
         save_path = self.save_path.with_stem(self.save_path.stem + "_surface").with_suffix(".xdmf")
         meshio.write(save_path, facet_mesh)
+        del facet_mesh
+        gc.collect()
         
     @staticmethod
     def regroup_geometry_entities(matches) -> defaultdict[list]:
@@ -172,7 +177,7 @@ class Msh2Xdmf:
 
 if __name__ == "__main__":
     path = Path(
-        r"/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/test/fin_asm2.msh"
+        r"/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/test/Assem1.msh"
     )
     exporter = Msh2Xdmf(path)
     exporter.convert()

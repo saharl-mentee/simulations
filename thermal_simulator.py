@@ -9,6 +9,8 @@ import ufl.finiteelement
 
 from mesh_loader import Mesh3DLoader
 from material_library import ThermalMaterialLibrary
+from msh_2_xdmf import Msh2Xdmf
+from thermal_fins_motor import plot_3d
 
 
 class Thermal_simulator:
@@ -21,7 +23,7 @@ class Thermal_simulator:
         neuman_bcs: Tuple[Tuple[int, float], ...] = None,
         elements_order: int = 2,
         T_amb: float = 25,
-        internal_heat_generation: float = 0,
+        internal_heat_generation: Tuple[Tuple[int, float], ...] = None,
     ):
         self.geometry_path = geometry_path
         self.materials = materials
@@ -31,19 +33,22 @@ class Thermal_simulator:
         self.convection_bcs = convection_bcs
         self.neuman_bcs = neuman_bcs
         self.T_amb = T_amb
-
-        mesh_loader = Mesh3DLoader(self.geometry_path)
-        self.mesh, (self.volume_tag, self.face_tags) = mesh_loader.load_mesh()
+        self.internal_heat_generation = internal_heat_generation
+        
+        self.load_mesh()
         self.ds = ufl.Measure("ds", domain=self.mesh, subdomain_data=self.face_tags)
+        self.dx = ufl.Measure("dx", domain=self.mesh, subdomain_data=self.volume_tag)
         
         self._function_space = None
         self._u = ufl.TrialFunction(self.function_space)
         self._v = ufl.TestFunction(self.function_space)
         self.a = 0
         self.L = 0
-        
-        self.internal_heat_generation = fem.Constant(self.mesh, default_scalar_type(internal_heat_generation))
 
+    def load_mesh(self):
+        mesh_loader = Mesh3DLoader(self.geometry_path.with_name(self.geometry_path.stem))
+        self.mesh, (self.volume_tag, self.face_tags) = mesh_loader.load_mesh()
+    
     @property
     def function_space(self) -> dolfinx.fem.FunctionSpace:
         """The FunctionSpace for the thermal problem.
@@ -101,8 +106,14 @@ class Thermal_simulator:
         return global_conduction_coeff
 
     def create_bilinear_function(self, conduction_coeff):
-        self.a = conduction_coeff * ufl.dot(ufl.grad(self._u), ufl.grad(self._v)) * ufl.dx
-        self.L = self.internal_heat_generation * self._v * ufl.dx
+        if self.internal_heat_generation is not None:
+            self.a = conduction_coeff * ufl.dot(ufl.grad(self._u), ufl.grad(self._v)) * ufl.dx
+            for tag, heat_generator in self.internal_heat_generation:
+                heat_generator = fem.Constant(self.mesh, default_scalar_type(heat_generator))
+                self.L += heat_generator * self._v * self.dx(tag)
+        else:
+            self.a = conduction_coeff * ufl.dot(ufl.grad(self._u), ufl.grad(self._v)) * ufl.dx
+            self.L = 0
         self.apply_convection()
         self.apply_neuman()
 
@@ -139,9 +150,19 @@ class Thermal_simulator:
 
 
 if __name__ == "__main__":
-    path = Path('/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/solid_test_2/standard_fin')
-    materials = ((742, 'Aluminium-6061'), (743, 'Copper'))
-    dirichlet_bc = ((746, 120), )
+    import matplotlib.pyplot as plt
     
-    simulation = Thermal_simulator(path, materials, dirichlet_bc)
-    simulation.run()
+    ##########################################################################
+    # ### importnat note! ###
+    # Before running this simulation, you have to convert the .msh file to
+    # .xdmf and .h5 files, using the Msh2Xdmf class.
+    ##########################################################################
+    
+    path = Path('/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/fin_assembly/fin_asm2.msh')
+    materials = ((51, 'Aluminium-6061'), (52, 'Copper'))
+    dirichlet_bc = ((49, 120), )
+    
+    simulation = Thermal_simulator(path, materials, dirichlet_bc, convection_bcs=((50, 5), ), internal_heat_generation=((52, 1.0e5), (51, 3e5)), T_amb=300)
+    u = simulation.run()
+    plot_3d(u, simulation.function_space)
+    plt.show()
