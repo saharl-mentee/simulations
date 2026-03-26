@@ -13,7 +13,7 @@ from msh_2_xdmf import Msh2Xdmf
 from thermal_fins_motor import plot_3d
 
 
-class Thermal_simulator:
+class ThermalSimulator:
     def __init__(
         self,
         geometry_path: Path,
@@ -104,8 +104,6 @@ class Thermal_simulator:
         else:
             self.a = conduction_coeff * ufl.dot(ufl.grad(self._u), ufl.grad(self._v)) * ufl.dx
             self.L = 0
-        self.apply_convection()
-        self.apply_neuman()
 
     def apply_convection(self) -> None:
         if self.convection_bcs is None: return
@@ -152,7 +150,7 @@ if __name__ == "__main__":
     materials = ((51, 'Aluminium-6061'), (52, 'Copper'))
     dirichlet_bc = ((49, 120), )
     
-    simulation = Thermal_simulator(path, materials, dirichlet_bc, convection_bcs=((50, 5), ), internal_heat_generation=((52, 1.0e5), (51, 3e5)), T_amb=300)
+    simulation = ThermalSimulator(path, materials, dirichlet_bc, convection_bcs=((50, 5), ), internal_heat_generation=((52, 1.0e5), (51, 3e5)), T_amb=300)
     u = simulation.run()
     plot_3d(u, simulation.function_space)
     plt.show()
