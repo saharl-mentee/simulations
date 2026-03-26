@@ -57,16 +57,6 @@ class Thermal_simulator:
             # Define a standard Lagrange element for Heat Transfer
             self._function_space = fem.functionspace(self.mesh, ("Lagrange", self.elements_order))
         return self._function_space
-    
-    # def u(self):
-    #     if self._u is None:
-    #         self._u = ufl.TrialFunction(self._function_space)
-    #     return self._u
-    
-    # def v(self):
-    #     if self._v is None:
-    #         self._v = ufl.TestFunction(self._function_space)
-    #     return self._v
 
     def run(self):
         conduction_coeff = self.apply_materials()
