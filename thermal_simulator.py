@@ -61,6 +61,7 @@ class ThermalSimulator:
         self.neuman_bcs = flux_bcs
         self.T_amb = T_amb
         self.internal_heat_generation = internal_heat_generation
+        self.conduction_coeff = None
         
         self.load_mesh()
         self.ds = ufl.Measure("ds", domain=self.mesh, subdomain_data=self.face_tags)
@@ -71,6 +72,7 @@ class ThermalSimulator:
         self._v = ufl.TestFunction(self.function_space)
         self.a = 0
         self.L = 0
+        
 
     def load_mesh(self) -> None:
         """Loads the mesh and extracts physical tags for volumes and surfaces."""
@@ -96,9 +98,9 @@ class ThermalSimulator:
         dolfinx.fem.Function
             The resulting temperature field solution.
         """
-        conduction_coeff = self.apply_materials()
+        self.conduction_coeff = self.apply_materials()
         self.apply_dirichlet_bc()
-        self.create_bilinear_function(conduction_coeff)
+        self.create_bilinear_function(self.conduction_coeff)
         self.apply_robin()
         self.apply_neuman()
         return self.solve()
@@ -222,7 +224,7 @@ class ThermalSimulator:
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    from thermal_plotter import VolumeViewer, SliceViewer
+    from thermal_plotter import VolumeViewer, SliceViewer, FluxViewer
     
     
     ##########################################################################
@@ -239,5 +241,6 @@ if __name__ == "__main__":
     u = simulation.run()
     # plot_3d(u, simulation.function_space)
     # viewer = VolumeViewer(u, simulation.function_space, to_probe=True)
-    viewer = SliceViewer(u, simulation.function_space, to_probe=True)    
+    # viewer = SliceViewer(u, simulation.function_space, to_probe=True)    
+    viewer = FluxViewer(u, simulation.function_space, simulation.conduction_coeff, to_probe=True)
     viewer.plotter.show()
