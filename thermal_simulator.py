@@ -222,6 +222,8 @@ class ThermalSimulator:
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
+    from thermal_plotter import plot_3d_solution, plot_3d_solution_slice
+    
     
     ##########################################################################
     # ### importnat note! ###
@@ -235,5 +237,7 @@ if __name__ == "__main__":
     
     simulation = ThermalSimulator(path, materials, dirichlet_bc, convection_bcs=((50, 5), ), internal_heat_generation=((52, 1.0e5), (51, 3e5)), T_amb=25)
     u = simulation.run()
-    plot_3d(u, simulation.function_space)
-    plt.show()
+    # plot_3d(u, simulation.function_space)
+    plotter1 = plot_3d_solution(u, simulation.function_space, to_probe=True)
+    plotter1 = plot_3d_solution_slice(u, simulation.function_space, to_probe=True)
+    plotter1.show()
