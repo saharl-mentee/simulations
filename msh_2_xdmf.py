@@ -7,6 +7,15 @@ from pathlib import Path
 from collections import defaultdict
 
 
+ELEMENT_TYPE_MAPPING = {
+    "tetra": "volume",
+    "hexahedron": "volume",
+    "triangle": "surface",
+    "quad": "surface",
+    "line": "edge", 
+    "vertex": "point"
+}
+
 class Msh2Xdmf:
     """convert the msh file to xdmf and h5 files that can be read by fenicsx."""
 
@@ -56,26 +65,10 @@ class Msh2Xdmf:
             If the required .geo file is missing.
         """
         self.check_geo_duplicate_physical_groups(self.path.with_suffix(".geo"))
+         
+        cells = list(self.mesh.cells_dict.keys())
+        [self.save_elements(el_type) for el_type in cells]
 
-        vol_type, surface_type = self.determine_elements_type()
-        self.save_volume_elements(vol_type)
-        self.save_surface_elements(surface_type)
-
-    def determine_elements_type(self) -> Tuple[str, str]:
-        """detects the type of elements in the msh file. whether they are hexagonal or tetraheadral
-
-        Returns
-        -------
-        Tuple[str, str]
-            volumetric type and surface type of the mesh.
-        """
-        if "hexahedron" in self.mesh.cells_dict:
-            volume_type, surface_type = "hexahedron", "quad"
-        elif "tetra" in self.mesh.cells_dict:
-            volume_type, surface_type = "tetra", "triangle"
-        else:
-            raise ValueError("type of mesh is not hexa nor tetra")
-        return volume_type, surface_type
 
     def check_geo_duplicate_physical_groups(self, path) -> None:
         """verifier that the user didnt mistakeably put a geometry entity into more
@@ -111,40 +104,22 @@ class Msh2Xdmf:
                     f"Geometry entities are assigned to MULTIPLE groups:\n {df.to_string(index=False)}"
                 )
 
-    def save_volume_elements(self, vol_type: str) -> None:
-        """Extract and save the 3D Volume (The Mesh)
-        This includes the tetrahedrons (Type 4) and hexahesron (Type 5)
+    def save_elements(self, element_type:str) -> None:
+        """Extract and save the mesh elements of a specific type to an XDMF file.
 
         Parameters
         ----------
-        vol_type : str
+        element_type : str
+            The type of mesh elements to extract (e.g., 'tetra', 'hexahedron', 'triangle', 'quad').
         """
-        vol_mesh = meshio.Mesh(
+        mesh_subset = meshio.Mesh(
             points=self.mesh.points,
-            cells={vol_type: self.mesh.cells_dict[vol_type]},
-            cell_data={"Grid": [self.mesh.cell_data_dict["gmsh:physical"][vol_type]]},
+            cells={element_type: self.mesh.cells_dict[element_type]},
+            cell_data={"Grid": [self.mesh.cell_data_dict["gmsh:physical"][element_type]]},
         )
-        save_path = self.save_path.with_stem(self.save_path.stem + "_volume").with_suffix(".xdmf")
-        meshio.write(save_path, vol_mesh)
-        del vol_mesh
-        gc.collect()
-
-    def save_surface_elements(self, surface_type: str) -> None:
-        """Extract and save the 2D Facets (The Boundary Tags)
-        This includes the triangles (Type 2) and quadrilaterals (Type 3)
-
-        Parameters
-        ----------
-        surface_type : str
-        """
-        facet_mesh = meshio.Mesh(
-            points=self.mesh.points,
-            cells={surface_type: self.mesh.cells_dict[surface_type]},
-            cell_data={"Grid": [self.mesh.cell_data_dict["gmsh:physical"][surface_type]]},
-        )
-        save_path = self.save_path.with_stem(self.save_path.stem + "_surface").with_suffix(".xdmf")
-        meshio.write(save_path, facet_mesh)
-        del facet_mesh
+        save_path = self.save_path.with_stem(self.save_path.stem + f"_{ELEMENT_TYPE_MAPPING[element_type]}").with_suffix(".xdmf")
+        meshio.write(save_path, mesh_subset)
+        del mesh_subset
         gc.collect()
         
     @staticmethod
@@ -177,7 +152,7 @@ class Msh2Xdmf:
 
 if __name__ == "__main__":
     path = Path(
-        r"/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/test/Assem1.msh"
+        r"/mnt/c/Users/saharl/Documents/simulations_api/simulations/test_dxf_exporter/standard_fin2.msh"
     )
     exporter = Msh2Xdmf(path)
     exporter.convert()
