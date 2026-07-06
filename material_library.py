@@ -41,7 +41,7 @@ class LinearElasticMaterial:
 class ElasticMaterialLibrary:
     _registry = {
         "steel": LinearElasticMaterial(name="Steel", E=210e9, nu=0.3, rho=7800),
-        "aluminum": LinearElasticMaterial(name="Aluminum", E=70e9, nu=0.33, rho=2700),
+        "aluminum-6061": LinearElasticMaterial(name="Aluminum-6061", E=70e9, nu=0.33, rho=2700),
     }
 
     @classmethod
