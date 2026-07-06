@@ -5,6 +5,7 @@ import pandas as pd
 from typing import Tuple
 from pathlib import Path
 from collections import defaultdict
+import numpy as np
 
 
 ELEMENT_TYPE_MAPPING = {
@@ -17,8 +18,13 @@ ELEMENT_TYPE_MAPPING = {
 }
 
 class Msh2Xdmf:
-    """convert the msh file to xdmf and h5 files that can be read by fenicsx."""
+    """
+    Convert Gmsh .msh files into XDMF and H5 formats compatible with FEniCSx.
 
+    This class extracts mesh topologies, checks for physical group integrity 
+    within corresponding Gmsh geometry files, and segregates different element 
+    dimensions into individual sub-meshes for seamless finite element ingestion.
+    """
 
     def __init__(self, path: Path, save_path: Path = None):
         """Initialize the MeshConverter and load the mesh data.
@@ -29,8 +35,8 @@ class Msh2Xdmf:
             the path to the .msh file to be converted.
         to_save : Path, optional
             new place to save the files to. defaults to the same folder.
-            if not None, should have full path, with wanted the file name, with no sufix.
-            the function will add sufix and volume/surface to the files respectively.
+            if not None, should have full path, with the desired file name, with no sufix.
+            the function will add sufix and type to the files respectively.
             default to None.
             
         Attributes
@@ -48,21 +54,19 @@ class Msh2Xdmf:
 
     def convert(self) -> None:
         """
-        Execute the full mesh conversion workflow from .msh to .xdmf.
+        Execute the pipeline to convert the loaded mesh into XDMF/H5 formats.
 
-        The process includes:
-        1. Validating the associated .geo file for duplicate physical groups.
-        2. Identifying the element types (e.g., tetrahedral vs. hexahedral).
-        3. Extracting and saving volume elements to a dedicated XDMF and h5 file.
-        4. Extracting and saving surface elements to a dedicated XDMF and h5 file.
+        This method validates the integrity of the mesh mapping using the matching 
+        `.geo` file before extracting and writing every individual element cell 
+        topology present in the mesh file to disk.
 
         Raises
         ------
         ValueError
-            If duplicate physical groups are found in the .geo file 
-            or if the mesh element type is unsupported.
+            If geometry entities are found to be cross-assigned to multiple 
+            overlapping physical groups.
         FileNotFoundError
-            If the required .geo file is missing.
+            If the corresponding `.geo` file cannot be located at the expected path.
         """
         self.check_geo_duplicate_physical_groups(self.path.with_suffix(".geo"))
          
@@ -71,18 +75,25 @@ class Msh2Xdmf:
 
 
     def check_geo_duplicate_physical_groups(self, path) -> None:
-        """verifier that the user didnt mistakeably put a geometry entity into more
-        than one physical group.
+        """
+        Verify that geometry entities are uniquely assigned to one physical group.
+
+        Parses the corresponding `.geo` file to ensure that no single entity 
+        (surface or volume) is mistakenly shared across multiple discrete 
+        Gmsh physical groups, which could otherwise corrupt boundary or domain 
+        markers in subsequent simulations.
 
         Parameters
         ----------
         path : Path
-            Path to the .geo file that generated the .msh file. should be in the same
-            folder and with the same name for convenience.
+            Path to the `.geo` file that generated the source `.msh` file.
 
         Raises
         ------
         ValueError
+            If any geometry entity IDs overlap across multiple physical groups.
+        FileNotFoundError
+            If the target `.geo` file does not exist at the provided location.
         """
         pattern = r'Physical (Surface|Volume)\("([^"]+)",\s*(\d+)?\)\s*=\s*\{([^}]+)\};'
 
@@ -105,17 +116,44 @@ class Msh2Xdmf:
                 )
 
     def save_elements(self, element_type:str) -> None:
-        """Extract and save the mesh elements of a specific type to an XDMF file.
+        """
+        Extract and isolate a specific element topology type to a separate XDMF file.
+
+        Creates a mesh subset isolating only the requested element type, binds 
+        its associated physical group data markers, writes it to disk, and forces 
+        immediate garbage collection to optimize memory overhead.
 
         Parameters
         ----------
         element_type : str
-            The type of mesh elements to extract (e.g., 'tetra', 'hexahedron', 'triangle', 'quad').
+            The specific topology identifier to extract from the mesh data 
+            (e.g., 'tetra', 'hexahedron', 'triangle', 'quad', 'line').
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        KeyError
+            If the requested `element_type` does not exist inside the global 
+            `ELEMENT_TYPE_MAPPING` registry.
         """
+        # 1. Grab raw cells and physical tags for this element type
+        cells = self.mesh.cells_dict[element_type]
+        tags = self.mesh.cell_data_dict["gmsh:physical"][element_type]
+        
+        # 2. Extract ONLY the unique points actually referenced by these cells
+        unique_point_indices, remapped_flat_cells = np.unique(cells, return_inverse=True)
+        pruned_points = self.mesh.points[unique_point_indices]
+        
+        # 3. Reshape the remapped cell indexing back to match original cell topology shape
+        remapped_cells = remapped_flat_cells.reshape(cells.shape)
+        
         mesh_subset = meshio.Mesh(
-            points=self.mesh.points,
-            cells={element_type: self.mesh.cells_dict[element_type]},
-            cell_data={"Grid": [self.mesh.cell_data_dict["gmsh:physical"][element_type]]},
+            points=pruned_points,
+            cells={element_type: remapped_cells},
+            cell_data={"Grid": [tags]},
         )
         save_path = self.save_path.with_stem(self.save_path.stem + f"_{ELEMENT_TYPE_MAPPING[element_type]}").with_suffix(".xdmf")
         meshio.write(save_path, mesh_subset)
@@ -125,19 +163,30 @@ class Msh2Xdmf:
     @staticmethod
     def regroup_geometry_entities(matches) -> defaultdict[list]:
         """
-        Groups geometry entities with their assigned physical groups.
+        Regroup raw regex geometry string matches into a structured index map.
+
+        Processes raw token configurations scraped out of `.geo` scripts, tokenizes 
+        comma-separated lists of sub-entity numbers, and indexes them directly 
+        against their parent physical group metadata tags.
 
         Parameters
         ----------
-        matches : list of tuple
-            A list of regex matches where each tuple contains:
-            (geometry_type, group_name, group_tag, entity_id).
+        matches : list of tuple of str
+            A list containing regex group extractions where each tuple represents:
+            (geometry_type, group_name, group_tag, entity_ids_str).
 
         Returns
         -------
-        defaultdict(list)
-            The updated entity_to_groups dictionary where keys are formatted
-            as "{id} ({type})".
+        defaultdict of list
+            A dictionary tracking assignments where keys are strings formatted 
+            as "{entity_id} ({geometry_type})" and values are lists of component 
+            lists containing `[group_name, group_tag]`.
+
+        Raises
+        ------
+        ValueError
+            If the `matches` collection is empty, indicating a total lack of 
+            definable physical entities within the checked source.
         """
         entity_to_groups = defaultdict(list)
         if not matches:
