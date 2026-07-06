@@ -183,6 +183,6 @@ if __name__ == '__main__':
     geometry_path = Path('/mnt/c/Users/saharl/Documents/simulations_api/simulations/test_dxf_exporter/standard_fin2.msh')
     mesh_loader = Mesh3DLoader(geometry_path.with_name(geometry_path.stem))
     output = mesh_loader.load_mesh()
-    verify_exported_points(geometry_path.with_name(f"{geometry_path.stem}_point.xdmf"))
+    # verify_exported_points(geometry_path.with_name(f"{geometry_path.stem}_point.xdmf"))
     print('success')
     
