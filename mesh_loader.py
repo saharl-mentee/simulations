@@ -139,10 +139,50 @@ class Mesh3DLoader:
             mesh.topology.create_entities(d)
             mesh.topology.create_connectivity(d, bulk_dim)
         mesh.topology.create_connectivity(0, bulk_dim) # Always connect vertices (0) to cells
+        
+def verify_exported_points(xdmf_path: Path):
+    import meshio
+    """Reads an exported XDMF point file and prints a structural sanity check."""
+    if not xdmf_path.exists():
+        print(f"❌ Verification Failed: File does not exist at {xdmf_path}")
+        return
+
+    # Read the exported file back in using meshio
+    mesh = meshio.read(xdmf_path)
+    
+    print("\n==============================")
+    print(f"📊 VERIFYING: {xdmf_path.name}")
+    print("==============================")
+    
+    # 1. Check if vertices exist
+    num_points = len(mesh.points)
+    print(f"✅ Total Points Exported: {num_points}")
+    
+    # 2. Print the exact spatial coordinates
+    print("\n📍 Exported Coordinates (X, Y, Z):")
+    for i, coords in enumerate(mesh.points):
+        print(f"  Point [{i}]: {coords}")
+        
+    # 3. FIXED: Look for "Grid" instead of "gmsh:physical"
+    if "Grid" in mesh.cell_data_dict:
+        tags = mesh.cell_data_dict["Grid"]
+        
+        # Unpack the array if meshio returned it inside a block list
+        if isinstance(tags, list) and len(tags) > 0:
+            tags = tags[0]
+            
+        print("\n🏷️  Associated Physical Tags:")
+        for i, tag in enumerate(tags):
+            print(f"  Point [{i}] Tag ID: {tag}")
+    else:
+        print("❌ Error: No physical tags found under 'Grid' in this XDMF file.")
+        
+    print("==============================\n")
 
 if __name__ == '__main__':
     geometry_path = Path('/mnt/c/Users/saharl/Documents/simulations_api/simulations/test_dxf_exporter/standard_fin2.msh')
     mesh_loader = Mesh3DLoader(geometry_path.with_name(geometry_path.stem))
     output = mesh_loader.load_mesh()
+    verify_exported_points(geometry_path.with_name(f"{geometry_path.stem}_point.xdmf"))
     print('success')
     
