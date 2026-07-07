@@ -9,6 +9,8 @@ from pathlib import Path
 from dolfinx.io import XDMFFile
 import numpy as np
 
+
+
 class Mesh3DLoader:
     """A utility class to handle loading, scaling, and topology initialization
     for FEniCSx meshes from XDMF files.
@@ -377,7 +379,6 @@ class Mesh3DLoader:
         
         
 def verify_exported_points(xdmf_path: Path):
-    import meshio
     """Reads an exported XDMF point file and prints a structural sanity check."""
     if not xdmf_path.exists():
         print(f"❌ Verification Failed: File does not exist at {xdmf_path}")
