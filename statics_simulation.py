@@ -141,18 +141,19 @@ class StaticStructuralSimulator:
                 if len(entities) > 0:
                     # Read the exact topological dimension (3=volume, 2=surface, 1=edge, 0=point)
                     ent_dim = tags_obj.dim
+                    
+                    # FIXED: Everything is now inside the block where the entities actually exist
+                    bc_vector = fem.Constant(self.mesh, default_scalar_type(value))
+                    dofs = fem.locate_dofs_topological(self.function_space, ent_dim, entities)
+                    
+                    self.bcs.append(fem.dirichletbc(bc_vector, dofs, self.function_space))
+                    found = True
+                    print(f"[Linked Dirichlet BC] Applied tag {tag} to '{entity_type}' region (Dimension: {ent_dim})")
+                    
+                    # FIXED: Break out of the inner loop immediately so later dimensions don't overwrite this data
+                    break
             
-            degrees_on_boundary = self.tags['surface'].find(tag)
-            face_dimension = self.mesh.topology.dim - 1
-            
-            # Bound value must match the vector space dimension
-            bc_vector = fem.Constant(self.mesh, default_scalar_type(value))
-            dofs = fem.locate_dofs_topological(self.function_space, ent_dim, entities)
-            
-            self.bcs.append(fem.dirichletbc(bc_vector,dofs,self.function_space,))
-            found = True
-        
-        if not found:
+            if not found:
                 raise KeyError(
                     f"Dirichlet tag {tag} was not found in any loaded mesh tags "
                     f"(cells, surfaces, edges, or points). Verify your Gmsh physical group IDs."
@@ -271,10 +272,10 @@ if __name__ == "__main__":
     # .xdmf and .h5 files, using the Msh2Xdmf class.
     ##########################################################################
     
-    path = Path('/mnt/c/Users/saharl/Documents/simulations_api/simulations/test_dxf_exporter/standard_fin.msh')
+    path = Path('/mnt/c/Users/saharl/Documents/simulations_api/simulations/test_dxf_exporter/standard_fin3.msh')
     materials = ((15, 'Aluminum-6061'), )
-    # dirichlet_bc = ((13, (0, 0, 0)), (18, (0, 1e-3, 0)))
-    dirichlet_bc = ((13, (0, 0, 0)), (16, (0, 1e-3, 0)))
+    dirichlet_bc = ((13, (0, 0, 0)), (18, (0, 1e-3, 0)))
+    # dirichlet_bc = ((13, (0, 0, 0)), (16, (0, 1e-3, 0)))
     
     simulation = StaticStructuralSimulator(path, materials, dirichlet_bc, elements_order=1)
     u = simulation.run()

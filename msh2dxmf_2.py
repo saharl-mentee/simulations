@@ -73,32 +73,14 @@ class Msh2Xdmf:
             # Keep isolated 0D tracking points completely independent
             if el_type == "vertex":
                 pt_tags = self.mesh.cell_data_dict["gmsh:physical"]["vertex"]
-                pt_cells = cells_dict["vertex"]
-                
-                # Look up exactly what index these nodes hold in the master 3D layout
-                synchronized_pt_cells = np.array([
-                    [global_to_local[old_idx]] for old_idx in pt_cells.flatten()
-                ], dtype=np.int32)
-                
                 pt_mesh = meshio.Mesh(
-                    points=master_points,  # Forces identical 3D coordinate layout matching the volume
-                    cells={"vertex": synchronized_pt_cells}, # Uses native 'vertex' keys
+                    points=self.mesh.points,
+                    cells={"vertex": cells_dict["vertex"]},
                     cell_data={"Grid": [pt_tags]}
                 )
                 pt_path = self.save_path.with_stem(self.save_path.stem + "_point").with_suffix(".xdmf")
                 meshio.write(pt_path, pt_mesh)
-                
-                # Post-Processing: Fix meshio's hardcoded "Polyvertex" text generation
-                with open(pt_path, "r") as f:
-                    xml_content = f.read()
-                
-                # Dynamically swap the words in the generated XML text
-                fixed_xml = xml_content.replace('TopologyType="Polyvertex"', 'TopologyType="Vertex"')
-                
-                with open(pt_path, "w") as f:
-                    f.write(fixed_xml)
-                    
-                print(f"[Exported] Perfectly synchronized native FEA Vertex file: {pt_path.name}")
+                print(f"[Exported] Independent point markers: {pt_path.name}")
                 continue
                 
             # 6. NEW LOGIC: Remap the boundary cells (triangles, quads, or lines) 
@@ -156,6 +138,6 @@ class Msh2Xdmf:
         return entity_to_groups
 
 if __name__ == "__main__":
-    path = Path(r"/mnt/c/Users/saharl/Documents/simulations_api/simulations/test_dxf_exporter/standard_fin2.msh")
+    path = Path(r"/mnt/c/Users/saharl/Documents/simulations_api/simulations/test_dxf_exporter/standard_fin3.msh")
     exporter = Msh2Xdmf(path)
     exporter.convert()
