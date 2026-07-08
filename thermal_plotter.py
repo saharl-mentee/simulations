@@ -3,39 +3,24 @@ from dolfinx import plot
 import numpy as np
 from dolfinx import fem
 
+from base_plotter import BaseProbeableViewer
 
-class BaseMeshViewer:
-    """Base class to encapsulate shared mesh parsing, data attachment, and formatting."""
-    
-    AXIS_MAP = {"x": (0, 1), "y": (2, 3), "z": (4, 5)}
+
+class BaseMeshViewer(BaseProbeableViewer):
+    """Base class to encapsulate shared mesh parsing and data attachment for
+    thermal (scalar temperature) fields. Builds on BaseProbeableViewer
+    (plotter setup, grid formatting, point-probing)."""
 
     def __init__(self, u, function_space_V, title="Mesh Viewer"):
-        self.plotter = pyvista.Plotter(title=title)
-        
+        super().__init__(title=title)
+
         # Extract the DOLFINx mesh topology and geometry
         topology, cell_types, geometry = plot.vtk_mesh(function_space_V)
         self.grid = pyvista.UnstructuredGrid(topology, cell_types, geometry)
-        
+
         # Attach the data vector
         self.grid.point_data["Temperature"] = u.x.array.real
         self.grid.set_active_scalars("Temperature")
-        
-    def apply_standard_grid_formatting(self):
-        """Applies consistent grid boundary formatting across all plotters."""
-        self.plotter.show_grid(
-            xtitle="X-Axis",
-            ytitle="Y-Axis",
-            ztitle="Z-Axis",
-            grid=True,
-            location="outer",
-            ticks="both",
-            font_size=14,
-            color="black",
-            fmt="%.2f",
-            show_xaxis=True,
-            show_yaxis=True,
-            show_zaxis=True,
-        )
 
 
 class VolumeViewer(BaseMeshViewer):
@@ -51,34 +36,11 @@ class VolumeViewer(BaseMeshViewer):
         )
         
         if to_probe:
-            self.plotter.enable_point_picking(
-                callback=self.probe_callback, show_message=True, font_size=12
-            )
-            print("Instructions: Hover over the mesh and press 'P' to pick a point.")
-            
+            self.enable_probing(self.plot_grid, "Temperature", unit="°C", value_fmt=".3f")
+
         self.plotter.add_axes()
         self.apply_standard_grid_formatting()
 
-    def probe_callback(self, point):
-        """Probes the physical 3D volume grid directly."""
-        idx = self.plot_grid.find_closest_point(point)
-        value = self.plot_grid.point_data["Temperature"][idx]
-        actual_mesh_coord = self.plot_grid.points[idx]
-
-        self.plotter.add_point_labels(
-            [actual_mesh_coord], 
-            [f"{value:.3f}°C"], 
-            name="probe", 
-            font_size=20,
-            point_size=10,
-            always_visible=True 
-        )
-
-        formatted_loc = np.array2string(
-            actual_mesh_coord, formatter={'float_kind': lambda x: f'{x:.2f}'}, separator=', '
-        )
-        print(f"Clicked Point ID: {idx} | Location: {formatted_loc} | Temperature: {value:.3f}°C")
-    
 
 class SliceViewer(BaseMeshViewer):
     def __init__(self, u, function_space_V, to_probe=True):
@@ -116,11 +78,12 @@ class SliceViewer(BaseMeshViewer):
             lambda flag: self.set_axis("z", flag), value=False, position=(10, 10), size=30, color_on="blue"
         )
         
-        if to_probe:
-            self.plotter.enable_point_picking(callback=self.probe_callback, show_message=True)
-            
         # Initialization
         self.update_slice_view(norm_val=self.norm_val)
+
+        if to_probe:
+            self.enable_probing(self.current_slice, "Temperature", unit="°C", value_fmt=".3f")
+
         self.apply_standard_grid_formatting()
         
     def set_axis(self, axis_name, flag):
@@ -164,35 +127,16 @@ class SliceViewer(BaseMeshViewer):
             
             if slc.n_points > 0:
                 self.current_slice = slc
+                # Keep the probe target in sync with whichever slice is visible
+                self._probe_grid = slc
                 self.actor = self.plotter.add_mesh(
-                    slc, cmap="rainbow", name="active_slice", 
+                    slc, cmap="rainbow", name="active_slice",
                     scalar_bar_args=sargs, pickable=True
                 )
         except Exception as e:
             print(f"Slice failed at {actual_pos}: {e}")
 
-    def probe_callback(self, point):
-        """Probes data points localized strictly on the active visible slice plane."""
-        if self.current_slice is None:
-            return  
 
-        idx = self.current_slice.find_closest_point(point)
-        value = self.current_slice.point_data["Temperature"][idx]
-        actual_mesh_coord = self.current_slice.points[idx]
-
-        self.plotter.add_point_labels(
-            [actual_mesh_coord], 
-            [f"{value:.3f}°C"], 
-            name="probe", 
-            font_size=20,
-            point_size=10,
-            always_visible=True  
-        )
-
-        axis_label = self.axis.upper()
-        print(f"Slice Pick | Axis: {axis_label} | Temperature: {value:.3f}°C")
-        
-        
 class FluxViewer(BaseMeshViewer):
     """Computes and visualizes spatial Heat Flux vectors using local material conductivity."""
     
@@ -247,13 +191,13 @@ class FluxViewer(BaseMeshViewer):
         self.update_arrow_scale(self.current_factor)
 
         if to_probe:
-            self.plotter.enable_point_picking(
-                callback=self.probe_callback, show_message=True, font_size=12
+            self.enable_probing(
+                self.derived_grid, "Flux_Magnitude", unit=" W/m²", value_fmt=".3e", vector_field="Heat_Flux"
             )
 
         self.plotter.add_axes()
         self.apply_standard_grid_formatting()
-        
+
     def prompt_for_scale(self):
         """Pops up a standard native entry dialog box to let you type an exact scale number."""
         import tkinter as tk
@@ -294,23 +238,88 @@ class FluxViewer(BaseMeshViewer):
         self.arrow_actor = self.plotter.add_mesh(arrows, color="orange", name="flux_vectors")
         self.plotter.render()
 
-    def probe_callback(self, point):
-        """Probes the heat flux vector field details at any clicked point."""
-        idx = self.derived_grid.find_closest_point(point)
-        
-        # 2. Extract the values from self.derived_grid (not plot_grid!)
-        magnitude = self.derived_grid.point_data["Flux_Magnitude"][idx]
-        vector = self.derived_grid.point_data["Heat_Flux"][idx]
-        actual_mesh_coord = self.derived_grid.points[idx]
 
-        # 3. Add the label flag to the viewport
-        self.plotter.add_point_labels(
-            [actual_mesh_coord], 
-            [f"{magnitude:.3e} W/m²"], 
-            name="probe", font_size=18, point_size=10, always_visible=True 
-        )
+import dolfinx
+from dolfinx import fem
+import ufl
+import numpy as np
+import pyvista as pv
+from mpi4py import MPI
 
-        # 4. Print the exact metrics out to the terminal log
-        formatted_vec = np.array2string(vector, formatter={'float_kind': lambda x: f'{x:.2e}'}, separator=', ')
-        print(f"Flux Probe | ID: {idx} | Magnitude: {magnitude:.3e} | Vector: {formatted_vec}")
-        
+def compute_von_mises(u: fem.Function, E: float, nu: float) -> fem.Function:
+    """Computes the scalar Von Mises stress field from a displacement field u.
+    Outputs a continuous CG1 scalar function for smooth visual plotting.
+    """
+    mesh = u.function_space.mesh
+    
+    # 1. Compute Lamé constants from Young's Modulus and Poisson's Ratio
+    mu = E / (2.0 * (1.0 + nu))
+    lambda_ = (E * nu) / ((1.0 + nu) * (1.0 - 2.0 * nu))
+    
+    # 2. Define Strain and Stress Tensors via UFL Expressions
+    def epsilon(v):
+        return ufl.sym(ufl.grad(v))
+    
+    def sigma(v):
+        return lambda_ * ufl.tr(epsilon(v)) * ufl.Identity(len(v)) + 2.0 * mu * epsilon(v)
+    
+    s = sigma(u) - (1.0 / 3.0) * ufl.tr(sigma(u)) * ufl.Identity(len(u))
+    von_mises_expr = ufl.sqrt(3.0 / 2.0 * ufl.inner(s, s))
+    
+    # 3. Create a continuous linear scalar space (CG1) to store the stress values
+    V_scalar = fem.functionspace(mesh, ("Lagrange", 1))
+    von_mises_field = fem.Function(V_scalar, name="Von_Mises_Stress_Pa")
+    
+    # 4. Interpolate the complex mathematical expression into our scalar function
+    expr = fem.Expression(von_mises_expr, V_scalar.element.interpolation_points())
+    von_mises_field.interpolate(expr)
+    
+    return von_mises_field
+
+
+def plot_von_mises(u: fem.Function, von_mises: fem.Function, scaling_factor: float = 1.0):
+    """Generates an interactive 3D PyVista plot showing Von Mises stress distributions
+    mapped directly onto the physically deformed grid.
+    """
+    mesh = u.function_space.mesh
+    
+    # Prune plotting if running on non-zero MPI ranks
+    if mesh.comm.rank != 0:
+        return
+
+    # 1. Initialize PyVista unstructured grid exporter
+    pv.start_xvfb() # Ensures headless environments don't crash
+    pv_grid = pv.UnstructuredGrid(*dolfinx.plot.vtk_mesh(mesh, mesh.topology.dim))
+    
+    # 2. Extract and attach the displacement data vectors
+    num_points = mesh.geometry.x.shape[0]
+    u_values = u.x.array.reshape((num_points, 3))
+    pv_grid.point_data["Displacement"] = u_values
+    
+    # 3. Extract and attach our computed Von Mises stress values
+    pv_grid.point_data["VonMises_Stress"] = von_mises.x.array
+    
+    # 4. Warp the visual mesh based on the deflection vectors
+    warped_grid = pv_grid.warp_by_vector("Displacement", factor=scaling_factor)
+    
+    # 5. Build the interactive visual render window
+    plotter = pv.Plotter(window_size=[1024, 768])
+    plotter.add_text("Static Structural Analysis: Von Mises Stress Field", font_size=12, color="white")
+    
+    # Add the deformed mesh colored by stress intensity
+    plotter.add_mesh(
+        warped_grid,
+        scalars="VonMises_Stress",
+        cmap="jet",                 # Classic FEA blue-to-red stress gradient map
+        show_edges=True,
+        edge_color="black",
+        line_width=0.5,
+        scalar_bar_args={"title": "Von Mises Stress [Pa]", "vertical": True}
+    )
+    
+    # Overlay an outline of the original, un-deformed CAD geometry for scale contrast
+    plotter.add_mesh(pv_grid, style="wireframe", color="white", opacity=0.15, label="Original Profile")
+    
+    plotter.add_axes()
+    plotter.view_isometric()
+    plotter.show()

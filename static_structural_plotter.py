@@ -4,23 +4,18 @@ import pyvista
 import ufl
 from dolfinx import plot, fem
 
+from base_plotter import BaseProbeableViewer
 
-class BaseStructuralViewer:
-    """Shared scaffolding for structural plots: mesh/displacement extraction,
-    grid formatting, and interactive point-probing. Mirrors the
-    BaseMeshViewer pattern in thermal_plotter.py, adapted for a
-    vector-valued (displacement) field instead of a scalar one.
+
+class BaseStructuralViewer(BaseProbeableViewer):
+    """Shared scaffolding for structural plots: mesh/displacement extraction
+    and warping. Builds on BaseProbeableViewer (plotter setup, grid
+    formatting, point-probing) with the vector-valued (displacement) field
+    handling specific to structural results.
     """
 
-    AXIS_MAP = {"x": (0, 1), "y": (2, 3), "z": (4, 5)}
-
     def __init__(self, u, function_space, title="Structural Viewer", off_screen=None):
-        # off_screen=None defers to pyvista's global OFF_SCREEN setting, matching
-        # thermal_plotter's BaseMeshViewer; pass an explicit bool to override it.
-        plotter_kwargs = {"title": title}
-        if off_screen is not None:
-            plotter_kwargs["off_screen"] = off_screen
-        self.plotter = pyvista.Plotter(**plotter_kwargs)
+        super().__init__(title=title, off_screen=off_screen)
 
         # Extract the DOLFINx mesh topology and geometry
         topology, cell_types, geometry = plot.vtk_mesh(function_space)
@@ -33,63 +28,10 @@ class BaseStructuralViewer:
         self.grid.set_active_vectors("Displacement")
         self.grid["Total Deflection"] = np.linalg.norm(displacement_vectors, axis=1)
 
-        self._probe_grid = None
-        self._probe_field = None
-        self._probe_unit = ""
-
     def warp(self, scaling_factor=1.0):
         """Returns a copy of the grid deflected by the displacement field, to
         visually exaggerate structural deformation."""
         return self.grid.warp_by_vector(factor=scaling_factor)
-
-    def apply_standard_grid_formatting(self):
-        """Applies consistent grid boundary formatting across all plotters."""
-        self.plotter.show_grid(
-            xtitle="X-Axis",
-            ytitle="Y-Axis",
-            ztitle="Z-Axis",
-            grid=True,
-            location="outer",
-            ticks="both",
-            font_size=14,
-            color="black",
-            fmt="%.2f",
-            show_xaxis=True,
-            show_yaxis=True,
-            show_zaxis=True,
-        )
-
-    def enable_probing(self, target_grid, field_name, unit=""):
-        """Wires up interactive point-picking on `target_grid`, reporting the
-        `field_name` scalar at the picked location — mirrors thermal_plotter's
-        probe_callback pattern.
-        """
-        self._probe_grid = target_grid
-        self._probe_field = field_name
-        self._probe_unit = unit
-        self.plotter.enable_point_picking(
-            callback=self._probe_callback, show_message=True, font_size=12
-        )
-        print("Instructions: Hover over the mesh and press 'P' to pick a point.")
-
-    def _probe_callback(self, point):
-        idx = self._probe_grid.find_closest_point(point)
-        value = self._probe_grid.point_data[self._probe_field][idx]
-        actual_mesh_coord = self._probe_grid.points[idx]
-
-        self.plotter.add_point_labels(
-            [actual_mesh_coord],
-            [f"{value:.3e}{self._probe_unit}"],
-            name="probe",
-            font_size=20,
-            point_size=10,
-            always_visible=True,
-        )
-
-        formatted_loc = np.array2string(
-            actual_mesh_coord, formatter={'float_kind': lambda x: f'{x:.2f}'}, separator=', '
-        )
-        print(f"Clicked Point ID: {idx} | Location: {formatted_loc} | {self._probe_field}: {value:.3e}{self._probe_unit}")
 
 
 class StressVolumeViewer(BaseStructuralViewer):
