@@ -263,7 +263,7 @@ class StaticStructuralSimulator:
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    from static_structural_plotter import StressVolumeViewer, plot_deflection
+    from static_structural_plotter import StressVolumeViewer, DeflectionViewer, VonMisesViewer, compute_von_mises_from_simulator
     
     
     ##########################################################################
@@ -281,7 +281,11 @@ if __name__ == "__main__":
     u = simulation.run()
     # plot_3d(u, simulation.function_space)
     # viewer = StressVolumeViewer(u, simulation.function_space, to_probe=True)
-    plot_deflection(u, simulation.function_space, scaling_factor=10)
+    deflection_viewer = DeflectionViewer(u, simulation.function_space, scaling_factor=10)
+    deflection_viewer.plotter.show()
+    stress_field = compute_von_mises_from_simulator(u, simulation.lmbda, simulation.mu)
+    von_mises_viewer = VonMisesViewer(u, stress_field, scaling_factor=1)
+    von_mises_viewer.show()
     # viewer = SliceViewer(u, simulation.function_space, to_probe=True)    
     # viewer = FluxViewer(u, simulation.function_space, simulation.conduction_coeff, to_probe=True)
     # viewer.plotter.show()
