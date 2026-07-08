@@ -64,8 +64,17 @@ class ThermalSimulator:
         self.conduction_coeff = None
         
         self.load_mesh()
-        self.ds = ufl.Measure("ds", domain=self.mesh, subdomain_data=self.face_tags)
-        self.dx = ufl.Measure("dx", domain=self.mesh, subdomain_data=self.volume_tag)
+        # Automatically detects boundary facets: dimension 2 (surfaces) in 3D meshes,
+        # or dimension 1 (edges) in 2D meshes.
+        facet_dim = self.mesh.topology.dim - 1
+        facet_tags = None
+        for tags_obj in self.tags.values():
+            if tags_obj is not None and tags_obj.dim == facet_dim:
+                facet_tags = tags_obj
+                break
+
+        self.ds = ufl.Measure("ds", domain=self.mesh, subdomain_data=facet_tags)
+        self.dx = ufl.Measure("dx", domain=self.mesh, subdomain_data=self.tags['cell'])
         
         self._function_space = None
         self._u = ufl.TrialFunction(self.function_space)
@@ -77,7 +86,7 @@ class ThermalSimulator:
     def load_mesh(self) -> None:
         """Loads the mesh and extracts physical tags for volumes and surfaces."""
         mesh_loader = Mesh3DLoader(self.geometry_path.with_name(self.geometry_path.stem))
-        self.mesh, (self.volume_tag, self.face_tags) = mesh_loader.load_mesh()
+        self.mesh, self.tags = mesh_loader.load_mesh()
     
     @property
     def function_space(self) -> dolfinx.fem.FunctionSpace:
@@ -103,26 +112,40 @@ class ThermalSimulator:
         self.create_bilinear_function(self.conduction_coeff)
         self.apply_robin()
         self.apply_neuman()
+        print("Solving the linear system...")
         return self.solve()
 
     def apply_dirichlet_bc(self) -> None:
         """Processes and stores Dirichlet boundary conditions (fixed temperature).
 
-        Locates degrees of freedom on the specified surface tags and 
-        populates the `self.bcs` list with dolfinx.fem.dirichletbc objects.
+        Locates degrees of freedom on the specified tags and populates the
+        `self.bcs` list with dolfinx.fem.dirichletbc objects. Scans across all
+        loaded tag dimensions (cell/surface/edge/point) to find whichever
+        entity the tag lives on.
         """
         for tag, value in self.dirichlet_bcs:
-            degrees_on_boundary = self.face_tags.find(tag)
-            face_dimension = self.mesh.topology.dim - 1
-            self.bcs.append(
-                fem.dirichletbc(
-                    default_scalar_type(value),
-                    fem.locate_dofs_topological(
-                        self.function_space, face_dimension, degrees_on_boundary
-                    ),
-                    self.function_space,
+            found = False
+
+            for entity_type, tags_obj in self.tags.items():
+                if tags_obj is None:
+                    continue
+
+                entities = tags_obj.find(tag)
+                if len(entities) > 0:
+                    ent_dim = tags_obj.dim
+                    dofs = fem.locate_dofs_topological(self.function_space, ent_dim, entities)
+                    self.bcs.append(
+                        fem.dirichletbc(default_scalar_type(value), dofs, self.function_space)
+                    )
+                    found = True
+                    print(f"[Linked Dirichlet BC] Applied tag {tag} to '{entity_type}' region (Dimension: {ent_dim})")
+                    break
+
+            if not found:
+                raise KeyError(
+                    f"Dirichlet tag {tag} was not found in any loaded mesh tags "
+                    f"(cells, surfaces, edges, or points). Verify your Gmsh physical group IDs."
                 )
-            )
 
     def apply_materials(self) -> dolfinx.fem.Function:
         """Maps material properties from the library to the mesh subdomains.
@@ -146,7 +169,7 @@ class ThermalSimulator:
         global_conduction_coeff_values = global_conduction_coeff.x.array
 
         for tag, material in materials:
-            global_conduction_coeff_values[self.volume_tag.find(tag)] = material.k
+            global_conduction_coeff_values[self.tags['cell'].find(tag)] = material.k
         return global_conduction_coeff
 
     def create_bilinear_function(self, conduction_coeff) -> None:
@@ -168,7 +191,8 @@ class ThermalSimulator:
                 self.L += heat_generator * self._v * self.dx(tag)
         else:
             self.a = conduction_coeff * ufl.dot(ufl.grad(self._u), ufl.grad(self._v)) * ufl.dx
-            self.L = 0
+            no_heat = fem.Constant(self.mesh, default_scalar_type(0.0))
+            self.L = no_heat * self._v * ufl.dx
 
     def apply_robin(self) -> None:
         """Applies Robin (convection) boundary conditions to the variational forms.
