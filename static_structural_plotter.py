@@ -93,6 +93,38 @@ class DeflectionViewer(BaseStructuralViewer):
         self.apply_standard_grid_formatting()
 
 
+def compute_von_mises(u: fem.Function, E: float, nu: float) -> fem.Function:
+    """Computes the scalar Von Mises stress field from a displacement field u,
+    for a single uniform material given by Young's Modulus and Poisson's Ratio.
+    Outputs a continuous CG1 scalar function for smooth visual plotting.
+    """
+    mesh = u.function_space.mesh
+
+    # 1. Compute Lamé constants from Young's Modulus and Poisson's Ratio
+    mu = E / (2.0 * (1.0 + nu))
+    lambda_ = (E * nu) / ((1.0 + nu) * (1.0 - 2.0 * nu))
+
+    # 2. Define Strain and Stress Tensors via UFL Expressions
+    def epsilon(v):
+        return ufl.sym(ufl.grad(v))
+
+    def sigma(v):
+        return lambda_ * ufl.tr(epsilon(v)) * ufl.Identity(len(v)) + 2.0 * mu * epsilon(v)
+
+    s = sigma(u) - (1.0 / 3.0) * ufl.tr(sigma(u)) * ufl.Identity(len(u))
+    von_mises_expr = ufl.sqrt(3.0 / 2.0 * ufl.inner(s, s))
+
+    # 3. Create a continuous linear scalar space (CG1) to store the stress values
+    V_scalar = fem.functionspace(mesh, ("Lagrange", 1))
+    von_mises_field = fem.Function(V_scalar, name="Von_Mises_Stress_Pa")
+
+    # 4. Interpolate the complex mathematical expression into our scalar function
+    expr = fem.Expression(von_mises_expr, V_scalar.element.interpolation_points())
+    von_mises_field.interpolate(expr)
+
+    return von_mises_field
+
+
 def compute_von_mises_from_simulator(u: fem.Function, lambda_field, mu_field) -> fem.Function:
     """Computes the scalar Von Mises stress field by directly reusing the
     spatially varying Lamé fields already defined in the Simulator.

@@ -247,24 +247,26 @@ class ThermalSimulator:
 
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
     from thermal_plotter import VolumeViewer, SliceViewer, FluxViewer
-    
-    
+
     ##########################################################################
     # ### importnat note! ###
     # Before running this simulation, you have to convert the .msh file to
     # .xdmf and .h5 files, using the Msh2Xdmf class.
     ##########################################################################
-    
+
     path = Path('/mnt/c/Users/saharl/Documents/V3.2/hand/finger_heat_transfer/test/Assem1.msh')
     materials = ((51, 'Aluminium-6061'), (52, 'Copper'))
     dirichlet_bc = ((49, 120), )
-    
+
     simulation = ThermalSimulator(path, materials, dirichlet_bc, convection_bcs=((50, 5), ), internal_heat_generation=((52, 1.0e5), (51, 3e5)), T_amb=25)
     u = simulation.run()
-    # plot_3d(u, simulation.function_space)
-    # viewer = VolumeViewer(u, simulation.function_space, to_probe=True)
-    # viewer = SliceViewer(u, simulation.function_space, to_probe=True)    
-    viewer = FluxViewer(u, simulation.function_space, simulation.conduction_coeff, to_probe=True)
-    viewer.plotter.show()
+
+    volume_viewer = VolumeViewer(u, simulation.function_space, to_probe=True)
+    volume_viewer.plotter.show()
+
+    slice_viewer = SliceViewer(u, simulation.function_space, to_probe=True)
+    slice_viewer.plotter.show()
+
+    flux_viewer = FluxViewer(u, simulation.function_space, simulation.conduction_coeff, to_probe=True)
+    flux_viewer.plotter.show()
