@@ -1,3 +1,5 @@
+import time
+
 import pyvista
 from dolfinx import plot
 import numpy as np
@@ -237,3 +239,117 @@ class FluxViewer(BaseMeshViewer):
         
         self.arrow_actor = self.plotter.add_mesh(arrows, color="orange", name="flux_vectors")
         self.plotter.render()
+
+
+class TimeSeriesViewer(BaseProbeableViewer):
+    """Interactive viewer for a *transient* temperature history.
+
+    Takes the temperature field's function space and the per-step history
+    produced by ``TransientThermalSimulator`` (``sim.history`` / ``sim.times``):
+    each ``history[i]`` is a dof array that lines up with the mesh points
+    exactly like ``u.x.array`` does in the static viewers. Drag the slider to
+    scrub to any timestep, step frame by frame with the Left/Right arrow keys,
+    or press 'M' to play all frames as a movie. The color range is fixed across
+    every frame so the animation doesn't flicker.
+    """
+
+    def __init__(self, function_space_V, history, times, to_probe=True):
+        super().__init__(title="Transient Temperature (scrub / press M for movie)")
+
+        if not history:
+            raise ValueError("TimeSeriesViewer received an empty history.")
+
+        self.history = history
+        self.times = times
+        self.n_frames = len(history)
+        self.current_frame = 0
+        self.slider = None  # set below; add_slider_widget fires its callback on creation
+
+        # Build the grid once; frames only swap the scalar array.
+        topology, cell_types, geometry = plot.vtk_mesh(function_space_V)
+        self.grid = pyvista.UnstructuredGrid(topology, cell_types, geometry)
+        self.grid.point_data["Temperature"] = history[0]
+        self.grid.set_active_scalars("Temperature")
+
+        # Display scaling (m -> mm), consistent with the other viewers.
+        self.plot_grid = self.grid.scale([1000, 1000, 1000], inplace=False)
+
+        # Fixed color range across all frames so the movie doesn't flicker.
+        self.clim = [
+            float(min(arr.min() for arr in history)),
+            float(max(arr.max() for arr in history)),
+        ]
+
+        sargs = dict(fmt="%.3f", title_font_size=20, label_font_size=15, color="black")
+        self.plotter.add_mesh(
+            self.plot_grid, show_edges=True, cmap="rainbow",
+            clim=self.clim, scalar_bar_args=sargs,
+        )
+
+        self.slider = self.plotter.add_slider_widget(
+            self._on_slider,
+            [0, self.n_frames - 1],
+            value=0,
+            title=self._frame_title(0),
+            fmt="",  # Hide the internal floating value; the title carries the info.
+            pointa=(0.4, 0.9),
+            pointb=(0.9, 0.9),
+        )
+
+        # Press 'M' to play the whole history as a movie; Left/Right arrow keys
+        # step one frame at a time.
+        self.plotter.add_key_event("m", self.play)
+        self.plotter.add_key_event("Right", self.next_frame)
+        self.plotter.add_key_event("Left", self.prev_frame)
+
+        if to_probe:
+            self.enable_probing(self.plot_grid, "Temperature", unit="°C", value_fmt=".3f")
+
+        self.plotter.add_axes()
+        self.apply_standard_grid_formatting()
+
+        print("\n" + "=" * 60)
+        print("INSTRUCTIONS:")
+        print("  • Drag the slider to scrub to any timestep.")
+        print("  • Use the Left/Right arrow keys to step frame by frame.")
+        print("  • Press 'M' to play the full time history as a movie.")
+        print("  • Hover over the mesh and press 'P' to probe a temperature.")
+        print("=" * 60 + "\n")
+
+    def _frame_title(self, frame):
+        t = self.times[frame] if frame < len(self.times) else 0.0
+        return f"Frame {frame}/{self.n_frames - 1}   t = {t:.4g} s"
+
+    def show_frame(self, frame):
+        """Displays a given frame index (clamped to the valid range)."""
+        frame = max(0, min(self.n_frames - 1, int(round(frame))))
+        self.current_frame = frame
+        # plot_grid is what's rendered and probed; swap its scalar array.
+        self.plot_grid.point_data["Temperature"] = self.history[frame]
+        if self.slider is not None:
+            self.slider.GetRepresentation().SetTitleText(self._frame_title(frame))
+        self.plotter.render()
+
+    def _on_slider(self, value):
+        self.show_frame(value)
+
+    def _goto_frame(self, frame):
+        """Moves to a frame and keeps the on-screen slider handle in sync."""
+        frame = max(0, min(self.n_frames - 1, int(round(frame))))
+        if self.slider is not None:
+            self.slider.GetRepresentation().SetValue(frame)
+        self.show_frame(frame)
+
+    def next_frame(self):
+        """Steps forward one frame (Right arrow)."""
+        self._goto_frame(self.current_frame + 1)
+
+    def prev_frame(self):
+        """Steps back one frame (Left arrow)."""
+        self._goto_frame(self.current_frame - 1)
+
+    def play(self):
+        """Plays through every frame, keeping the slider handle in sync."""
+        for frame in range(self.n_frames):
+            self._goto_frame(frame)
+            time.sleep(0.08)
