@@ -48,7 +48,7 @@ class ThermalSimulator:
         elements_order : int, optional
             Polynomial order for Lagrange elements, by default 2.
         T_amb : float, optional
-            Environmental temperature for rubin surfaces, by default 25.
+            Environmental temperature for Robin (convection) surfaces, by default 25.
         internal_heat_generation : Tuple[Tuple[int, float], ...], optional
             Tuples of (volume_tag, heat_generation_value), by default None.
         """
@@ -57,8 +57,8 @@ class ThermalSimulator:
         self.elements_order = elements_order
         self.bcs = []
         self.dirichlet_bcs = temperature_bcs
-        self.rubin_bcs = convection_bcs
-        self.neuman_bcs = flux_bcs
+        self.robin_bcs = convection_bcs
+        self.neumann_bcs = flux_bcs
         self.T_amb = T_amb
         self.internal_heat_generation = internal_heat_generation
         self.conduction_coeff = None
@@ -111,7 +111,7 @@ class ThermalSimulator:
         self.apply_dirichlet_bc()
         self.create_bilinear_function(self.conduction_coeff)
         self.apply_robin()
-        self.apply_neuman()
+        self.apply_neumann()
         print("Solving the linear system...")
         return self.solve()
 
@@ -200,20 +200,20 @@ class ThermalSimulator:
         Modifies both the bilinear form `a` and the linear form `L` to 
         account for heat exchange with the ambient environment.
         """
-        if self.rubin_bcs is None: return
-        for tag, h in self.rubin_bcs:
+        if self.robin_bcs is None: return
+        for tag, h in self.robin_bcs:
             h = fem.Constant(self.mesh, default_scalar_type(h))
             self.a += h * self._u * self._v * self.ds(tag)
             self.L += h * self.T_amb * self._v * self.ds(tag)
 
-    def apply_neuman(self) -> None:
+    def apply_neumann(self) -> None:
         """Applies Neumann (heat flux) boundary conditions.
 
         Calculates the flux density per unit area based on the total 
         input flux and the integrated surface area of the tagged boundary.
         """
-        if self.neuman_bcs is None: return
-        for tag, q in self.neuman_bcs:
+        if self.neumann_bcs is None: return
+        for tag, q in self.neumann_bcs:
             area_form = fem.form(fem.Constant(self.mesh, 1.0) * self.ds(tag))
             area_local = fem.assemble_scalar(area_form)
             area_total = self.mesh.comm.allreduce(area_local, op=MPI.SUM)
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     from thermal_plotter import VolumeViewer, SliceViewer, FluxViewer
 
     ##########################################################################
-    # ### importnat note! ###
+    # ### important note! ###
     # Before running this simulation, you have to convert the .msh file to
     # .xdmf and .h5 files, using the Msh2Xdmf class.
     ##########################################################################

@@ -52,7 +52,7 @@ class StaticStructuralSimulator:
         self.elements_order = elements_order
         self.bcs = []
         self.dirichlet_bcs = displacement_bcs
-        self.neuman_bcs = traction_bcs
+        self.neumann_bcs = traction_bcs
         self.T_amb = T_amb
         self.internal_forces = body_forces
         self.lmbda = None
@@ -118,7 +118,7 @@ class StaticStructuralSimulator:
         self.lmbda, self.mu = self.apply_materials()
         self.apply_dirichlet_bc()
         self.create_bilinear_function()
-        self.apply_neuman()
+        self.apply_neumann()
         print("Solving the linear system...")
         return self.solve()
 
@@ -212,14 +212,14 @@ class StaticStructuralSimulator:
                 f_bc = fem.Constant(self.mesh, default_scalar_type(f_vector))
                 self.L += ufl.dot(f_bc, self._v) * self.dx(tag)
 
-    def apply_neuman(self) -> None:
+    def apply_neumann(self) -> None:
         """Applies Neumann (force/traction) boundary conditions.
 
         Calculates the flux density per unit area based on the total 
         input flux and the integrated surface area of the tagged boundary.
         """
-        if self.neuman_bcs is None: return
-        for tag, q in self.neuman_bcs:
+        if self.neumann_bcs is None: return
+        for tag, q in self.neumann_bcs:
             area_form = fem.form(fem.Constant(self.mesh, 1.0) * self.ds(tag))
             area_local = fem.assemble_scalar(area_form)
             area_total = self.mesh.comm.allreduce(area_local, op=MPI.SUM)
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     
     
     ##########################################################################
-    # ### importnat note! ###
+    # ### important note! ###
     # Before running this simulation, you have to convert the .msh file to
     # .xdmf and .h5 files, using the Msh2Xdmf class.
     ##########################################################################

@@ -269,7 +269,7 @@ def fin_cylindrical(path):
     a = k * ufl.dot(ufl.grad(u), ufl.grad(v)) * ufl.dx + h * u * v * ds(convection_id)
     L = h * T_amb * v * ds(convection_id)
 
-    # # for Neuman base BC
+    # # for Neumann base BC
     # input_watt = 8
     # q_val = fem.Constant(mesh, default_scalar_type( input_watt / (2 * 437e-6)))
     # L = h * T_amb * v * ds(convection_id) + q_val * v * ds(base_id)
@@ -397,7 +397,7 @@ def fin_cylindrical_with_base(path):
     a = k_func * ufl.dot(ufl.grad(u), ufl.grad(v)) * ufl.dx + h * u * v * ds(convection_id)
     L = h * T_amb * v * ds(convection_id)
 
-    # # for Neuman base BC
+    # # for Neumann base BC
     # input_watt = 8
     # q_val = fem.Constant(mesh, default_scalar_type( input_watt / (2 * 437e-6)))
     # L = h * T_amb * v * ds(convection_id) + q_val * v * ds(base_id)

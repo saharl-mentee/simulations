@@ -112,8 +112,8 @@ class TransientThermalSimulator:
         self.elements_order = elements_order
         self.bcs = []
         self.dirichlet_bcs = temperature_bcs
-        self.rubin_bcs = convection_bcs
-        self.neuman_bcs = flux_bcs
+        self.robin_bcs = convection_bcs
+        self.neumann_bcs = flux_bcs
         self.T_amb = T_amb
         self.internal_heat_generation = internal_heat_generation
 
@@ -282,8 +282,8 @@ class TransientThermalSimulator:
 
         # Robin / convection: h*u*v on the LHS operator, its T_n counterpart on
         # the RHS, and the constant ambient load h*T_amb*v (never time-varying).
-        if self.rubin_bcs is not None:
-            for tag, h in self.rubin_bcs:
+        if self.robin_bcs is not None:
+            for tag, h in self.robin_bcs:
                 h_const = fem.Constant(self.mesh, default_scalar_type(h))
                 self.a += theta * h_const * u * v * self.ds(tag)
                 self.L += -(1.0 - theta) * h_const * self.T_n * v * self.ds(tag)
@@ -299,8 +299,8 @@ class TransientThermalSimulator:
 
         # Neumann / heat flux (total flux over the tagged surface, divided by
         # the MPI-reduced surface area to get a flux density).
-        if self.neuman_bcs is not None:
-            for tag, q_flux in self.neuman_bcs:
+        if self.neumann_bcs is not None:
+            for tag, q_flux in self.neumann_bcs:
                 area_form = fem.form(fem.Constant(self.mesh, 1.0) * self.ds(tag))
                 area_local = fem.assemble_scalar(area_form)
                 area_total = self.mesh.comm.allreduce(area_local, op=MPI.SUM)

@@ -34,11 +34,11 @@ to the FEM pipeline.
    (`fin_assembly/`, `motor_fin/`, `solid_circular/`, `solid_test*/`, `test_dxf_exporter/`,
    `test_linear_elasticity/`) holds one geometry's full artifact chain.
 2. **`.msh` → `.xdmf`/`.h5`** — dolfinx cannot read `.msh` directly. Convert first with
-   `Msh2Xdmf` in **`msh2dxmf_2.py`** (current version — synchronizes all boundary element types
+   `Msh2Xdmf` in **`msh2xdmf_2.py`** (current version — synchronizes all boundary element types
    against one master volume point layout so that node indices line up across files). Produces
    `<name>_volume.xdmf/.h5` plus one file per other element type found in the mesh
    (`_surface`, `_edge`, `_point`). `msh_2_xdmf.py` is the older per-element-type independent
-   exporter kept for reference/comparison — prefer `msh2dxmf_2.py` for new work.
+   exporter kept for reference/comparison — prefer `msh2xdmf_2.py` for new work.
    Both validate that no Gmsh physical group is assigned to overlapping geometry entities by
    parsing the sibling `.geo` file (`check_geo_duplicate_physical_groups`) before converting.
 3. **Loading** — `mesh_loader.py`'s `Mesh3DLoader` takes the path *stem* (no suffix) shared by
@@ -71,11 +71,11 @@ to the FEM pipeline.
 ## Working with a new geometry
 
 To run a simulation on a new part: mesh it in Gmsh with physical groups for every volume and
-BC surface, then run `Msh2Xdmf(path).convert()` from `msh2dxmf_2.py` before instantiating
+BC surface, then run `Msh2Xdmf(path).convert()` from `msh2xdmf_2.py` before instantiating
 `ThermalSimulator`/`StaticStructuralSimulator` — both simulators' `load_mesh()` expects the
 `_volume.xdmf` (and sibling) files to already exist next to the `.msh`, they do not convert
 on the fly. Physical group tags used in `materials`/BC tuples must match the integer tags
-assigned in the `.geo` file. Use `mesh_sainity_checker.py`'s `MeshSanityChecker` to verify
+assigned in the `.geo` file. Use `mesh_sanity_checker.py`'s `MeshSanityChecker` to verify
 point/coordinate synchronization across the exported `_volume`/`_surface`/`_edge`/`_point`
 files (and vertex tag alignment) before debugging a solver failure — most "BC tag not found"
 or misaligned-geometry issues trace back to a conversion mismatch here, not the solver.

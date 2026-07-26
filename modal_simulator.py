@@ -347,7 +347,7 @@ if __name__ == "__main__":
     from modal_plotter import ModeShapeViewer, ModeAnimationViewer, ModalStressViewer
 
     ##########################################################################
-    # ### importnat note! ###
+    # ### important note! ###
     # Before running this simulation, you have to convert the .msh file to
     # .xdmf and .h5 files, using the Msh2Xdmf class.
     ##########################################################################
